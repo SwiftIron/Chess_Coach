@@ -1,20 +1,20 @@
 # ♜ Hässelby Chess Coach
 
-A chess coaching platform designed for Swedish school students. Play against AI opponents of varying difficulty, solve tactical puzzles, and receive real-time coaching feedback on every move — all running completely offline on school Chromebooks.
+A chess coaching platform designed for Swedish school students. Play against AI opponents of varying difficulty, solve tactical puzzles, and receive real-time coaching feedback on every move - all running completely offline on school Chromebooks.
 
 ## Features
 
-- **5 AI opponents** — from Peon (~200 ELO) to my attempt at a master (~2200 ELO), each with distinct playing styles
-- **1,000+ tactical puzzles** — sourced from the Lichess database, filterable by difficulty and theme
-- **Live coaching** — every move is analysed with feedback on tactics, positional play, and common mistakes
-- **Pattern recognition** — detects forks, pins, skewers, discovered attacks, back rank threats, and 12+ tactical patterns
-- **Opening identification** — recognises 45+ named openings and explains their ideas
-- **Contextual lessons** — teaching popups triggered by in-game events, using language accessible to teenagers
-- **Chess clock** — configurable time controls (bullet, blitz, rapid, or no clock)
-- **Bilingual** — full English and Swedish language support
-- **Board themes** — Classic, Nordic, Forest, and Midnight colour schemes
-- **2-player mode** — local play on the same device
-- **Fully offline** — zero network dependencies, runs from a single HTML file
+- **5 AI opponents**  from Peon (~200 ELO) to my attempt at a master (~2200 ELO), each with distinct playing styles
+- **1,000+ tactical puzzles** - sourced from the Lichess database, filterable by difficulty and theme
+- **Live coaching** - every move is analysed with feedback on tactics, positional play, and common mistakes
+- **Pattern recognition** - detects forks, pins, skewers, discovered attacks, back rank threats, and 12+ tactical patterns
+- **Opening identification** - recognises 45+ named openings and explains their ideas
+- **Contextual lessons** - teaching popups triggered by in-game events, using language accessible to teenagers
+- **Chess clock** - configurable time controls (bullet, blitz, rapid, or no clock)
+- **Bilingual** - full English and Swedish language support
+- **Board themes** - Classic, Nordic, Forest, and Midnight colour schemes
+- **2-player mode** - local play on the same device
+- **Fully offline** - zero network dependencies, runs from a single HTML file
 
 ## Quick Start
 
@@ -22,7 +22,7 @@ A chess coaching platform designed for Swedish school students. Play against AI 
 
 1. Download `index.html` from this repository
 2. Open it in Chrome on any computer or Chromebook
-3. Done — no installation, no server, no internet required
+3. Done - no installation, no server, no internet required
 
 ### Option B: Deploy to GitHub Pages (school-wide access)
 
@@ -31,7 +31,7 @@ A chess coaching platform designed for Swedish school students. Play against AI 
 3. Set source to **Deploy from a branch**, select `main`, folder `/ (root)`
 4. Click **Save**
 5. Your site will be live at `https://<username>.github.io/<repo-name>/`
-6. Share the URL with students — it works on any device with a modern browser
+6. Share the URL with students - it works on any device with a modern browser
 
 ### Option C: Deploy on school Chromebooks (kiosk mode)
 
@@ -85,6 +85,6 @@ The Lichess puzzle data is licensed under [CC0 1.0](https://creativecommons.org/
 
 ## Acknowledgements
 
-- [Lichess](https://lichess.org) — open puzzle database (CC0)
-- [React](https://react.dev) — UI framework
+- [Lichess](https://lichess.org) - open puzzle database (CC0)
+- [React](https://react.dev) - UI framework
 - Built for the students of Hässelby, Stockholm
