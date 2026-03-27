@@ -17355,7 +17355,7 @@ const PN = { en: { P: "pawn", N: "knight", B: "bishop", R: "rook", Q: "queen", K
 function pnL(p, lang) { return (PN[lang] || PN.en)[pt(p)] || pName(p); }
 const UI = {
     en: {
-        title: "Chess Coach", sub: "Play • Learn • Compete", playTab: "⚔️ Play", puzzTab: "🧩 Puzzles",
+        title: "Chess Coach", sub: "Play • Learn • Compete", playTab: "⚔️ Play", puzzTab: "🧩 Puzzles", learnTab: "📚 Learn",
         twoP: "👥 2P", flip: "↕ Flip", undo: "↩ Undo", newG: "↺ New", summary: "📊 Summary",
         coaching: "💬 Live Coaching", beginner: "📖 Beginner", advanced: "⚡ Advanced",
         firstMoveMsg: "Make your first move!",
@@ -17415,7 +17415,7 @@ const UI = {
         yourMove: "Your move!", puzzComplete: "Puzzle complete!", showHint: "Show Hint",
     },
     sv: {
-        title: "Schackcoach", sub: "Spela • Lär • Tävla", playTab: "⚔️ Spela", puzzTab: "🧩 Pussel",
+        title: "Schackcoach", sub: "Spela • Lär • Tävla", playTab: "⚔️ Spela", puzzTab: "🧩 Pussel", learnTab: "📚 Lär dig",
         twoP: "👥 2S", flip: "↕ Vänd", undo: "↩ Ångra", newG: "↺ Nytt", summary: "📊 Sammanfattning",
         coaching: "💬 Coachning", beginner: "📖 Nybörjare", advanced: "⚡ Avancerad",
         firstMoveMsg: "Gör ditt första drag!",
@@ -18223,13 +18223,13 @@ function gmBotMove(g) {
     /* Time management */
     let pieces = 0;
     for (let r=0;r<8;r++) for (let c=0;c<8;c++) if (g.board[r][c]) pieces++;
-    const baseTime = pieces <= 8 ? 600 : pieces <= 14 ? 1200 : 1800;
+    const baseTime = pieces <= 8 ? 1500 : pieces <= 14 ? 2500 : 3500;
     _gmTimeLimit = Date.now() + baseTime;
     /* Iterative deepening with minimum depth guarantee */
     let bestMove = null;
     let bestScore = -Infinity;
-    const minDepth = pieces <= 8 ? 5 : 4; /* ALWAYS complete at least this depth */
-    const maxDepth = pieces <= 6 ? 14 : pieces <= 10 ? 10 : pieces <= 16 ? 8 : 7;
+    const minDepth = pieces <= 8 ? 6 : 5; /* ALWAYS complete at least this depth — no time abort before this */
+    const maxDepth = pieces <= 6 ? 16 : pieces <= 10 ? 12 : pieces <= 16 ? 10 : 8;
     for (let d = 1; d <= maxDepth; d++) {
         _gmAbort = false;
         if (d > minDepth && !_gmMinDepthDone) _gmMinDepthDone = true; /* enable time abort after min depth */
@@ -18250,101 +18250,6 @@ function gmBotMove(g) {
         if (bestScore > 90000 || bestScore < -90000) break;
         /* Only check time after minimum depth is done */
         if (d >= minDepth && Date.now() > _gmTimeLimit - 100) break;
-    }
-    /* BLUNDER GUARD: Before returning, verify the chosen move doesn't hang material */
-    if (bestMove) {
-        const { game: ng } = execMove(g, bestMove);
-        const movedPiece = g.board[bestMove.fr][bestMove.fc];
-        const capturedPiece = g.board[bestMove.tr][bestMove.tc];
-        const myVal = pVal(movedPiece);
-        const capVal = capturedPiece ? pVal(capturedPiece) : 0;
-        /* Check if our piece is immediately capturable on its new square */
-        if (myVal > 1 && attacked(ng.board, bestMove.tr, bestMove.tc, g.turn)) {
-            /* Is it defended? */
-            let defended = false;
-            for (let rr=0;rr<8&&!defended;rr++) for (let cc=0;cc<8&&!defended;cc++) {
-                const dp = ng.board[rr][cc]; if (!dp || !own(dp,g.turn) || (rr===bestMove.tr&&cc===bestMove.tc)) continue;
-                const dt = pt(dp);
-                if (dt==="P") { const dir=g.turn==="w"?-1:1; if (rr+dir===bestMove.tr&&(cc-1===bestMove.tc||cc+1===bestMove.tc)) defended=true; }
-                else if (dt==="N") { for (const [dr,dc] of [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]]) if (rr+dr===bestMove.tr&&cc+dc===bestMove.tc) defended=true; }
-                else if (dt==="K") { if (Math.abs(rr-bestMove.tr)<=1&&Math.abs(cc-bestMove.tc)<=1) defended=true; }
-                else { const dirs=dt==="B"?[[-1,-1],[-1,1],[1,-1],[1,1]]:dt==="R"?[[-1,0],[1,0],[0,-1],[0,1]]:[[-1,-1],[-1,1],[1,-1],[1,1],[-1,0],[1,0],[0,-1],[0,1]];
-                    for (const [dr,dc] of dirs) { for (let i=1;i<8;i++) { const nr=rr+dr*i,nc=cc+dc*i; if (!inB(nr,nc)) break; if (nr===bestMove.tr&&nc===bestMove.tc) { defended=true; break; } if (ng.board[nr][nc]) break; } } }
-            }
-            /* If undefended and we lose more than we captured, find a safer move */
-            const netLoss = defended ? 0 : myVal - capVal;
-            if (netLoss >= 2) {
-                /* Try to find any move that doesn't blunder */
-                const legal = getLegal(g);
-                let safeBest = null, safeScore = -Infinity;
-                for (const m of legal) {
-                    const { game: ng2 } = execMove(g, m);
-                    const pc2 = g.board[m.fr][m.fc];
-                    const cap2 = g.board[m.tr][m.tc];
-                    const myV2 = pVal(pc2);
-                    const capV2 = cap2 ? pVal(cap2) : 0;
-                    let isSafe = true;
-                    if (myV2 > 1 && attacked(ng2.board, m.tr, m.tc, g.turn)) {
-                        let def2 = false;
-                        for (let rr=0;rr<8&&!def2;rr++) for (let cc=0;cc<8&&!def2;cc++) {
-                            const dp=ng2.board[rr][cc]; if (!dp||!own(dp,g.turn)||(rr===m.tr&&cc===m.tc)) continue;
-                            const dt=pt(dp);
-                            if (dt==="P"){const dir=g.turn==="w"?-1:1;if(rr+dir===m.tr&&(cc-1===m.tc||cc+1===m.tc))def2=true;}
-                            else if(dt==="N"){for(const[dr,dc]of[[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]])if(rr+dr===m.tr&&cc+dc===m.tc)def2=true;}
-                            else if(dt==="K"){if(Math.abs(rr-m.tr)<=1&&Math.abs(cc-m.tc)<=1)def2=true;}
-                            else{const dirs=dt==="B"?[[-1,-1],[-1,1],[1,-1],[1,1]]:dt==="R"?[[-1,0],[1,0],[0,-1],[0,1]]:[[-1,-1],[-1,1],[1,-1],[1,1],[-1,0],[1,0],[0,-1],[0,1]];
-                                for(const[dr,dc]of dirs){for(let i=1;i<8;i++){const nr=rr+dr*i,nc=cc+dc*i;if(!inB(nr,nc))break;if(nr===m.tr&&nc===m.tc){def2=true;break;}if(ng2.board[nr][nc])break;}}}
-                        }
-                        if (!def2 && myV2 - capV2 >= 2) isSafe = false;
-                    }
-                    if (isSafe) {
-                        const ev = evalFull(ng2.board, g.turn);
-                        if (ev > safeScore) { safeScore = ev; safeBest = m; }
-                    }
-                }
-                if (safeBest) bestMove = safeBest;
-            }
-        }
-        /* Also check: did we leave a high-value piece hanging elsewhere? */
-        const { game: ngFinal } = execMove(g, bestMove);
-        const oppMoves = getLegal(ngFinal);
-        let worstHang = 0, hangInfo = null;
-        for (const om of oppMoves) {
-            const target = ngFinal.board[om.tr][om.tc];
-            if (!target || !own(target, g.turn)) continue;
-            const tv = pVal(target);
-            if (tv <= 1) continue;
-            /* Is the target defended? */
-            const { game: ng3 } = execMove(ngFinal, om);
-            const recaps = getLegal(ng3).filter(rm => rm.tr === om.tr && rm.tc === om.tc);
-            const isDefended = recaps.length > 0;
-            const netGain = isDefended ? tv - pVal(ngFinal.board[om.fr][om.fc]) : tv;
-            if (netGain > worstHang) { worstHang = netGain; hangInfo = om; }
-        }
-        /* If we're hanging a piece worth 3+, try to find a better move */
-        if (worstHang >= 3) {
-            const legal = getLegal(g);
-            let safeBest2 = null, safeScore2 = -Infinity;
-            for (const m of legal) {
-                const { game: ng4 } = execMove(g, m);
-                const oppM4 = getLegal(ng4);
-                let maxHang4 = 0;
-                for (const om4 of oppM4) {
-                    const t4 = ng4.board[om4.tr][om4.tc];
-                    if (!t4 || !own(t4, g.turn)) continue;
-                    const tv4 = pVal(t4); if (tv4 <= 1) continue;
-                    const { game: ng5 } = execMove(ng4, om4);
-                    const recaps4 = getLegal(ng5).filter(rm => rm.tr === om4.tr && rm.tc === om4.tc);
-                    const net4 = recaps4.length > 0 ? tv4 - pVal(ng4.board[om4.fr][om4.fc]) : tv4;
-                    if (net4 > maxHang4) maxHang4 = net4;
-                }
-                if (maxHang4 < worstHang) {
-                    const ev = evalFull(ng4.board, g.turn);
-                    if (ev > safeScore2) { safeScore2 = ev; safeBest2 = m; }
-                }
-            }
-            if (safeBest2) bestMove = safeBest2;
-        }
     }
     return bestMove || getLegal(g)[0] || null;
 }
@@ -20324,8 +20229,17 @@ function MaterialBar({ board }) {
 /* ── Shared Board Component ── */
 function Board({ board, flip, sel, dests, lastMv, onClick, hintSq, wrongSq, disabled, theme }) {
     const th = theme || BOARD_THEMES[0];
-    return React.createElement("div", { style: { width: "min(400px,86vw)", aspectRatio: "1/1" } },
-        React.createElement("div", { style: { width: "100%", height: "100%", display: "grid", gridTemplateColumns: "repeat(8,1fr)", gridTemplateRows: "repeat(8,1fr)", borderRadius: 6, overflow: "hidden", boxShadow: "0 8px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(212,175,55,0.15)", border: "2px solid rgba(212,175,55,0.25)" } }, Array.from({ length: 64 }).map((_, i) => {
+    const boardRef = useRef(null);
+    const [cellSize, setCellSize] = useState(40);
+    useEffect(() => {
+        const measure = () => { if (boardRef.current) { setCellSize(Math.floor(boardRef.current.offsetWidth / 8)); } };
+        measure();
+        window.addEventListener("resize", measure);
+        return () => window.removeEventListener("resize", measure);
+    }, []);
+    const pieceFontSize = Math.max(20, Math.min(48, Math.floor(cellSize * 0.82)));
+    return React.createElement("div", { ref: boardRef, style: { width: "min(400px,86vw)", position: "relative", paddingBottom: "min(400px,86vw)" } },
+        React.createElement("div", { style: { position: "absolute", inset: 0, display: "grid", gridTemplateColumns: "repeat(8,1fr)", gridTemplateRows: "repeat(8,1fr)", borderRadius: 6, overflow: "hidden", boxShadow: "0 8px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(212,175,55,0.15)", border: "2px solid rgba(212,175,55,0.25)" } }, Array.from({ length: 64 }).map((_, i) => {
             const vr = flip ? 7 - Math.floor(i / 8) : Math.floor(i / 8);
             const vc = flip ? 7 - (i % 8) : i % 8;
             const isLt = (vr + vc) % 2 === 0;
@@ -20352,7 +20266,7 @@ function Board({ board, flip, sel, dests, lastMv, onClick, hintSq, wrongSq, disa
             return React.createElement("div", { key: i, onClick: () => !disabled && onClick(vr, vc), style: { background: bg, display: "flex", alignItems: "center", justifyContent: "center", position: "relative", cursor: disabled ? "default" : "pointer", transition: "background 0.15s", userSelect: "none" } },
                 isDest && !isCapD && React.createElement("div", { style: { position: "absolute", width: "26%", height: "26%", borderRadius: "50%", background: "rgba(0,0,0,0.2)" } }),
                 isCapD && React.createElement("div", { style: { position: "absolute", width: "85%", height: "85%", borderRadius: "50%", border: "3px solid rgba(0,0,0,0.2)", boxSizing: "border-box" } }),
-                piece && React.createElement("span", { style: { fontSize: "min(calc(86vw/10),40px)", lineHeight: 1, pointerEvents: "none", color: piece === piece.toUpperCase() ? "#fff" : "#1e293b", textShadow: piece === piece.toUpperCase() ? "0 1px 3px rgba(0,0,0,0.5)" : "0 1px 2px rgba(0,0,0,0.15)" } }, SYM[piece]),
+                piece && React.createElement("span", { style: { fontSize: pieceFontSize, lineHeight: 1, pointerEvents: "none", color: piece === piece.toUpperCase() ? "#fff" : "#1e293b", textShadow: piece === piece.toUpperCase() ? "0 1px 3px rgba(0,0,0,0.5)" : "0 1px 2px rgba(0,0,0,0.15)" } }, SYM[piece]),
                 dc === 0 && React.createElement("span", { style: { position: "absolute", top: 1, left: 2, fontSize: 8, fontWeight: 700, opacity: 0.4, color: isLt ? th.coordL : th.coordD, pointerEvents: "none" } }, flip ? dr + 1 : 8 - dr),
                 dr === 7 && React.createElement("span", { style: { position: "absolute", bottom: 0, right: 2, fontSize: 8, fontWeight: 700, opacity: 0.4, color: isLt ? th.coordL : th.coordD, pointerEvents: "none" } }, flip ? String.fromCharCode(104 - dc) : String.fromCharCode(97 + dc)));
         })));
@@ -20968,6 +20882,412 @@ function PlayMode({ lang, theme }) {
                     CS[x.r].label))))));
 }
 /* ═══════════════════════════════════════════════════════════════════════════════
+   LEARN MODE — Interactive tactical lessons, opening guides, drills
+   ═══════════════════════════════════════════════════════════════════════════════ */
+const TACTICAL_LESSONS = [
+    { id: "fork", icon: "⚡", title: "The Fork", titleSv: "Gaffeln",
+        desc: "One piece attacks two (or more) enemy pieces at the same time. The opponent can only save one — you win the other. Knights are fork masters because they jump over everything.",
+        descSv: "En pjäs attackerar två (eller fler) fiendens pjäser samtidigt. Motståndaren kan bara rädda en — du vinner den andra. Springare är gaffelkungar eftersom de hoppar över allt.",
+        positions: [
+            { fen: "r3k2r/ppp2ppp/2n5/3N4/8/8/PPP2PPP/R3K2R w KQkq - 0 1", moves: ["d5c7"], hint: "The knight can attack the king and rook at the same time!", hintSv: "Springaren kan attackera kungen och tornet samtidigt!", explain: "Nc7+ forks the king and rook. The king must move, and you capture the rook for free.", explainSv: "Sc7+ gafflar kungen och tornet. Kungen måste flytta och du tar tornet gratis." },
+            { fen: "r1bqkb1r/pppp1ppp/2n5/4p3/2B1n3/5N2/PPPP1PPP/RNBQK2R w KQkq - 0 1", moves: ["d2d4"], hint: "Push d4 to attack two pieces at once!", hintSv: "Tryck d4 för att attackera två pjäser!", explain: "d4 attacks both the knight on e4 and the pawn on e5 — a pawn fork! The e4 knight is attacked and the e5 pawn falls.", explainSv: "d4 attackerar springaren på e4 och bonden på e5 — en bondgaffel!" },
+            { fen: "r2qk2r/ppp2ppp/2nb4/3p4/8/5Q2/PPP2PPP/R1B1K2R w KQkq - 0 1", moves: ["f3b3"], hint: "The queen can attack two undefended targets!", hintSv: "Damen kan attackera två oförsvarade mål!", explain: "Qb3 attacks both the b7 pawn and the d5 pawn. Black can't defend both.", explainSv: "Db3 attackerar både b7-bonden och d5-bonden. Svart kan inte försvara båda." }
+        ]},
+    { id: "pin", icon: "📌", title: "The Pin", titleSv: "Bindningen",
+        desc: "A pin freezes an enemy piece in place because moving it would expose a more valuable piece behind it. An absolute pin (against the king) means the piece literally cannot legally move.",
+        descSv: "En bindning fryser en fiendepjäs på plats eftersom att flytta den skulle avslöja en mer värdefull pjäs bakom. En absolut bindning (mot kungen) betyder att pjäsen inte lagligt kan flytta.",
+        positions: [
+            { fen: "r1bqkbnr/ppp2ppp/2np4/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 0 1", moves: ["c4b5"], hint: "Pin the knight to the king with your bishop!", hintSv: "Bind springaren till kungen med din löpare!", explain: "Bb5 pins the c6 knight to the king. The knight cannot move without exposing the king to check.", explainSv: "Lb5 binder c6-springaren till kungen. Springaren kan inte flytta utan att avslöja kungen." },
+            { fen: "rn1qkbnr/ppp1pppp/8/3p4/4P1b1/5N2/PPPP1PPP/RNBQKB1R w KQkq - 0 1", moves: ["f1e2"], hint: "Develop and break the pin!", hintSv: "Utveckla och bryt bindningen!", explain: "Be2 blocks the pin on the f3 knight. Now the knight is free to move again.", explainSv: "Le2 blockerar bindningen av f3-springaren. Nu är springaren fri igen." }
+        ]},
+    { id: "skewer", icon: "🗡️", title: "The Skewer", titleSv: "Spettet",
+        desc: "A skewer is a reverse pin. You attack a high-value piece (king or queen), and when it's forced to move, you capture the piece behind it. Like a kebab — pierce through the front to get the back.",
+        descSv: "Ett spett är en omvänd bindning. Du attackerar en högvärdig pjäs (kung eller dam), och när den tvingas flytta tar du pjäsen bakom. Som ett grillspett — stick genom fronten för att nå baksidan.",
+        positions: [
+            { fen: "6k1/8/8/8/8/8/1K6/R4r2 w - - 0 1", moves: ["a1a8"], hint: "Check the king to win the rook behind it!", hintSv: "Schacka kungen för att vinna tornet bakom!", explain: "Ra8+ skewers the king and the rook on f2. The king must move, and Ra2 or Rf8 captures material.", explainSv: "Ta8+ spettar kungen och tornet på f2. Kungen måste flytta." },
+            { fen: "6k1/5p1p/6p1/8/8/1B6/5PPP/6K1 w - - 0 1", moves: ["b3e6"], hint: "The bishop can skewer along the diagonal!", hintSv: "Löparen kan spetta längs diagonalen!", explain: "Be6 attacks the f7 pawn and threatens to penetrate behind Black's king position.", explainSv: "Le6 attackerar f7-bonden och hotar att penetrera bakom svarts kungställning." }
+        ]},
+    { id: "discovered", icon: "💣", title: "Discovered Attack", titleSv: "Avslöjad attack",
+        desc: "Move one piece out of the way to reveal an attack from another piece behind it. If the revealed attack is check, it's called a discovered check — one of the most devastating tactics because your moved piece gets a free action.",
+        descSv: "Flytta en pjäs ur vägen för att avslöja en attack från en annan pjäs bakom. Om den avslöjade attacken är schack kallas det avslöjad schack — en av de mest förödande taktikerna.",
+        positions: [
+            { fen: "r2qk2r/ppp2ppp/2n5/3np3/2B5/4PN2/PPP2PPP/RNBQK2R w KQkq - 0 1", moves: ["c4d5"], hint: "Move the bishop to reveal an attack!", hintSv: "Flytta löparen för att avslöja en attack!", explain: "Bxd5 captures the knight AND discovers an attack from the queen on d1 toward d5/d8 line.", explainSv: "Lxd5 tar springaren OCH avslöjar en attack från damen på d1." }
+        ]},
+    { id: "backrank", icon: "🚨", title: "Back Rank Mate", titleSv: "Bakre raden-matt",
+        desc: "The most common checkmate pattern in chess! When the king is trapped on the back rank by its own pawns, a rook or queen can deliver mate. Always give your king an escape square ('luft').",
+        descSv: "Det vanligaste mattmönstret i schack! När kungen är instängd på bakre raden av sina egna bönder kan ett torn eller dam ge matt. Ge alltid din kung ett flyktfält ('luft').",
+        positions: [
+            { fen: "6k1/5ppp/8/8/8/8/8/R3K3 w - - 0 1", moves: ["a1a8"], hint: "The back rank is wide open — mate in one!", hintSv: "Bakre raden är vidöppen — matt i ett drag!", explain: "Ra8# is checkmate! The king can't escape because its own pawns block g7, h7, f7.", explainSv: "Ta8# är matt! Kungen kan inte fly för att dess egna bönder blockerar g7, h7, f7." },
+            { fen: "3r2k1/5ppp/8/8/8/8/5PPP/3R2K1 w - - 0 1", moves: ["d1d8"], hint: "Invade the back rank!", hintSv: "Invadera bakre raden!", explain: "Rd8 leads to a back rank mate, as the king is boxed in by its own pawns.", explainSv: "Td8 leder till bakre raden-matt, kungen är instängd av sina egna bönder." }
+        ]},
+    { id: "smothered", icon: "🐴", title: "Smothered Mate", titleSv: "Kvävd matt",
+        desc: "A knight delivers checkmate while the king is completely surrounded by its own pieces. The king literally suffocates — there's nowhere to go. One of the most beautiful patterns in chess.",
+        descSv: "En springare ger matt medan kungen är helt omgiven av sina egna pjäser. Kungen kvävs bokstavligen — det finns ingenstans att ta vägen. Ett av de vackraste mönstren i schack.",
+        positions: [
+            { fen: "r5rk/6pp/7N/8/8/8/8/4K3 w - - 0 1", moves: ["h6f7"], hint: "The knight can smother the king!", hintSv: "Springaren kan kväva kungen!", explain: "Nf7# — the king is smothered! It's surrounded by its own rook and pawns, and the knight delivers check from f7.", explainSv: "Sf7# — kungen är kvävd! Den är omgiven av sitt eget torn och bönder." }
+        ]},
+    { id: "removal", icon: "🎯", title: "Removing the Defender", titleSv: "Ta bort försvararen",
+        desc: "If a piece is defending something important, capture that defender! Once the guard is gone, the thing it was protecting falls. Think of it like sniping the medic in an RTS — suddenly the whole squad is vulnerable.",
+        descSv: "Om en pjäs försvarar något viktigt, ta den försvararen! När vakten är borta faller det den skyddade.",
+        positions: [
+            { fen: "r1bq1rk1/ppp2ppp/2np4/4p3/2B1P1n1/2N2N2/PPPP1PPP/R1BQ1RK1 w - - 0 1", moves: ["c4f7"], hint: "The bishop on f7 is the key defender — remove it!", hintSv: "Löparen på f7 är nyckelförsvararen — ta bort den!", explain: "Bxf7+ removes the defender of key squares and exposes the king. After Rxf7, the position opens up dangerously.", explainSv: "Lxf7+ tar bort försvararen av nyckelrutor och avslöjar kungen." }
+        ]},
+    { id: "deflection", icon: "🎭", title: "Deflection", titleSv: "Avledning",
+        desc: "Force a defending piece to abandon its post. By threatening something else, you lure the guardian away and strike at what it was protecting. Like sending a drop on their natural expansion to pull their army out of position.",
+        descSv: "Tvinga en försvarande pjäs att överge sin post. Genom att hota något annat lockar du bort vakten och slår mot det den skyddade.",
+        positions: [
+            { fen: "r4rk1/ppp2ppp/8/3q4/8/2N5/PPP2PPP/R2Q1RK1 w - - 0 1", moves: ["c3d5"], hint: "The queen is guarding key squares — deflect it!", hintSv: "Damen vaktar nyckelrutor — avled den!", explain: "Nxd5 forces the queen to recapture, deflecting it from its defensive duties.", explainSv: "Sxd5 tvingar damen att återta, vilket avleder den från sina försvarsuppgifter." }
+        ]},
+    { id: "zwischenzug", icon: "⚡", title: "Zwischenzug", titleSv: "Mellandrag",
+        desc: "An 'in-between' move. Instead of making the expected recapture, you slip in a stronger move first — usually a check or a major threat. Your opponent has to deal with YOUR surprise before resuming their plan.",
+        descSv: "Ett 'mellandrag'. Istället för att göra det förväntade återtagandet, smyger du in ett starkare drag först — vanligtvis en schack eller ett stort hot.",
+        positions: [
+            { fen: "r1bqk2r/pppp1ppp/2n2n2/2b1p3/2BPP3/5N2/PPP2PPP/RNBQK2R w KQkq - 0 1", moves: ["d4d5"], hint: "Instead of trading, push forward with tempo!", hintSv: "Istället för att byta, tryck framåt med tempo!", explain: "d5! — instead of capturing on e5, this in-between move attacks the knight on c6 with tempo, gaining space and initiative.", explainSv: "d5! — istället för att ta på e5, attackerar detta mellandrag springaren på c6 med tempo." }
+        ]},
+    { id: "sacrifice", icon: "💎", title: "The Sacrifice", titleSv: "Offret",
+        desc: "Give up material now to gain something bigger later — checkmate, a winning attack, or a decisive advantage. The hardest skill in chess: seeing beyond the immediate loss to the payoff. In RTS terms, it's like losing a squad to take out their main base.",
+        descSv: "Ge upp material nu för att vinna något större senare — matt, en vinnande attack, eller en avgörande fördel. Den svåraste färdigheten i schack.",
+        positions: [
+            { fen: "r1b1k2r/ppppqppp/2n2n2/2b1p3/2B1P3/3P1N2/PPP1QPPP/RNB1K2R w KQkq - 0 1", moves: ["c4f7"], hint: "Sacrifice the bishop to shatter the king's defences!", hintSv: "Offra löparen för att krossa kungens försvar!", explain: "Bxf7+! A classic bishop sacrifice on f7, exposing the king and creating a powerful attack.", explainSv: "Lxf7+! Ett klassiskt löparoffer på f7 som avslöjar kungen och skapar en kraftfull attack." }
+        ]}
+];
+const OPENING_LESSONS = [
+    { id: "italian", icon: "🇮🇹", title: "Italian Game", titleSv: "Italienska partiet",
+        desc: "One of the oldest and most famous openings in chess! White develops quickly and points the bishop at Black's weakest spot — the f7 pawn, which only the king protects. This leads to exciting, open games with lots of tactics.",
+        descSv: "En av de äldsta och mest berömda öppningarna i schack! Vit utvecklar snabbt och riktar löparen mot svarts svagaste punkt — f7-bonden, som bara kungen försvarar. Detta leder till spännande, öppna partier med massor av taktik.",
+        moves: ["e2e4","e7e5","g1f3","b8c6","f1c4"],
+        fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        stepDesc: ["White pushes the e-pawn two squares to grab the center.","Black copies — their e-pawn also grabs the center!","White brings out the knight to f3 — it attacks Black's e5 pawn.","Black defends with the knight on c6 — now e5 is safe.","White places the bishop on c4, aiming straight at f7. This is the Italian Game!"],
+        stepDescSv: ["Vit trycker e-bonden två steg för att ta centrum.","Svart kopierar — deras e-bonde tar också centrum!","Vit tar ut springaren till f3 — den attackerar svarts e5-bonde.","Svart försvarar med springaren på c6 — nu är e5 säker.","Vit placerar löparen på c4, riktad rakt mot f7. Detta är det Italienska partiet!"],
+        ideas: "The Italian Game is about fast development and attacking f7. After Bc4, White is ready to castle and has a strong center. Look for chances to play d4 and open up the position for your pieces!",
+        ideasSv: "Det Italienska partiet handlar om snabb utveckling och att attackera f7. Efter Lc4 är vit redo att rockera och har ett starkt centrum. Leta efter chanser att spela d4 och öppna ställningen för dina pjäser!" },
+    { id: "sicilian", icon: "🐉", title: "Sicilian Defense", titleSv: "Sicilianskt försvar",
+        desc: "Black's most popular and aggressive answer to e4! Instead of copying White, Black plays c5 to fight for the center in a different way. This leads to sharp, exciting battles where both sides attack.",
+        descSv: "Svarts mest populära och aggressiva svar på e4! Istället för att kopiera vit spelar svart c5 för att kämpa om centrum på ett annat sätt. Detta leder till skarpa, spännande strider där båda sidor attackerar.",
+        moves: ["e2e4","c7c5","g1f3","d7d6","d2d4","c5d4","f3d4"],
+        fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        stepDesc: ["White takes the center with e4.","Black plays c5 — fighting for the d4 square without blocking other pawns.","White develops the knight to f3.","Black plays d6 — protecting e5 and preparing to develop.","White pushes d4, opening the center!","Black captures with cxd4.","White recaptures with the knight — Nxd4. This is the Open Sicilian!"],
+        stepDescSv: ["Vit tar centrum med e4.","Svart spelar c5 — kämpar om d4-rutan utan att blockera andra bönder.","Vit utvecklar springaren till f3.","Svart spelar d6 — skyddar e5 och förbereder utveckling.","Vit trycker d4 och öppnar centrum!","Svart tar med cxd4.","Vit tar tillbaka med springaren — Sxd4. Detta är det Öppna Sicilianska!"],
+        ideas: "In the Sicilian, Black gets a semi-open c-file (great for rooks!) and fights for the center from the side. White usually has more space but Black has active counterplay. Both sides need to be ready to attack!",
+        ideasSv: "I Sicilianskt försvar får svart en halvöppen c-linje (bra för torn!) och kämpar om centrum från sidan. Vit har oftast mer utrymme men svart har aktivt motspel. Båda sidor måste vara redo att attackera!" },
+    { id: "london", icon: "🇬🇧", title: "London System", titleSv: "Londonsystemet",
+        desc: "The perfect opening for beginners! White plays the same moves no matter what Black does. It's solid, safe, and easy to remember. You develop your bishop early, build a strong wall of pawns, and castle quickly.",
+        descSv: "Den perfekta öppningen för nybörjare! Vit spelar samma drag oavsett vad svart gör. Den är solid, säker och lätt att komma ihåg. Du utvecklar din löpare tidigt, bygger en stark bondmur och rockerar snabbt.",
+        moves: ["d2d4","d7d5","g1f3","g8f6","c1f4"],
+        fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        stepDesc: ["White opens with d4 — another great center pawn.","Black responds with d5 — equal center control.","White develops the knight to f3 — solid and flexible.","Black mirrors with Nf6 — a natural developing move.","The key London move: Bf4! Get this bishop OUT before playing e3 (which would trap it). This is the London System!"],
+        stepDescSv: ["Vit öppnar med d4 — en annan bra centerbonde.","Svart svarar med d5 — lika centrumkontroll.","Vit utvecklar springaren till f3 — solid och flexibel.","Svart speglar med Sf6 — ett naturligt utvecklingsdrag.","Det avgörande Londondraget: Lf4! Få ut denna löpare INNAN du spelar e3 (som skulle fånga den). Detta är Londonsystemet!"],
+        ideas: "The London is like building a fortress: pawns on d4 and e3 form a wall, the bishop on f4 controls important squares, then you castle and bring out the rest. It's hard to go wrong with this setup!",
+        ideasSv: "London är som att bygga en fästning: bönder på d4 och e3 bildar en mur, löparen på f4 kontrollerar viktiga rutor, sedan rockerar du och tar ut resten. Det är svårt att göra fel med denna uppställning!" },
+    { id: "queensgambit", icon: "👑", title: "Queen's Gambit", titleSv: "Damgambit",
+        desc: "White offers a pawn to take control of the center! Don't worry — it's not really a sacrifice. White almost always gets the pawn back. This is one of the most respected openings in chess, used by world champions for over 100 years.",
+        descSv: "Vit erbjuder en bonde för att ta kontroll över centrum! Oroa dig inte — det är inte riktigt ett offer. Vit får nästan alltid tillbaka bonden. Detta är en av de mest respekterade öppningarna i schack, använd av världsmästare i över 100 år.",
+        moves: ["d2d4","d7d5","c2c4"],
+        fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        stepDesc: ["White opens with d4.","Black matches with d5.","White plays c4 — the Queen's Gambit! This pawn challenges Black's d5 pawn. If Black takes (dxc4), White will play e4 and dominate the center!"],
+        stepDescSv: ["Vit öppnar med d4.","Svart matchar med d5.","Vit spelar c4 — Damgambiten! Denna bonde utmanar svarts d5-bonde. Om svart tar (dxc4) spelar vit e4 och dominerar centrum!"],
+        ideas: "The Queen's Gambit fights for the center with pawns. Black has to choose: take the pawn (Queen's Gambit Accepted) or hold the center with ...e6 (Queen's Gambit Declined). Both are fine — but now Black has to make a plan!",
+        ideasSv: "Damgambiten kämpar om centrum med bönder. Svart måste välja: ta bonden (Damgambit accepterad) eller hålla centrum med ...e6 (Damgambit avböjd). Båda är bra — men nu måste svart ha en plan!" },
+    { id: "french", icon: "🇫🇷", title: "French Defense", titleSv: "Franskt försvar",
+        desc: "A solid, defensive opening where Black builds a wall of pawns and waits for the right moment to strike back. It's like building a bunker — you let the enemy push forward, then hit them when they're overextended!",
+        descSv: "En solid, defensiv öppning där svart bygger en bondmur och väntar på rätt ögonblick att slå tillbaka. Det är som att bygga en bunker — du låter fienden trycka framåt och slår sedan när de är överutsträckta!",
+        moves: ["e2e4","e7e6","d2d4","d7d5"],
+        fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        stepDesc: ["White opens e4.","Black plays e6 — preparing to challenge the center next move.","White pushes d4 to build a big center.","Black strikes with d5! Now the e4 pawn is under attack. White must decide what to do — this is the French Defense!"],
+        stepDescSv: ["Vit öppnar e4.","Svart spelar e6 — förbereder att utmana centrum nästa drag.","Vit trycker d4 för att bygga ett stort centrum.","Svart slår med d5! Nu är e4-bonden under attack. Vit måste bestämma sig — detta är Franskt försvar!"],
+        ideas: "In the French, Black's pawns on d5 and e6 form a tough defensive chain. The downside? The light-squared bishop on c8 is stuck behind the pawns. Black's plan is to break through with ...c5 later and free their pieces.",
+        ideasSv: "I Franskt försvar bildar svarts bönder på d5 och e6 en tuff försvarskedja. Nackdelen? Den ljusa löparen på c8 sitter fast bakom bönderna. Svarts plan är att bryta igenom med ...c5 senare och befria sina pjäser." },
+    { id: "carokann", icon: "🛡️", title: "Caro-Kann Defense", titleSv: "Caro-Kann-försvaret",
+        desc: "One of the safest openings for Black! Like the French Defense, Black challenges White's e4 pawn — but without locking in the light bishop. It's the choice of players who like solid, reliable chess.",
+        descSv: "En av de säkraste öppningarna för svart! Precis som Franskt försvar utmanar svart vits e4-bonde — men utan att låsa in den ljusa löparen. Det är valet för spelare som gillar solid, pålitlig schack.",
+        moves: ["e2e4","c7c6","d2d4","d7d5"],
+        fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        stepDesc: ["White opens e4.","Black plays c6 — a quiet move that prepares d5 next.","White builds the big center with d4.","Black strikes with d5! The e4 pawn is attacked. Notice that unlike the French, the light bishop on c8 is NOT blocked — it can still come out!"],
+        stepDescSv: ["Vit öppnar e4.","Svart spelar c6 — ett lugnt drag som förbereder d5 härnäst.","Vit bygger det stora centrumet med d4.","Svart slår med d5! E4-bonden är attackerad. Observera att till skillnad från Franskt försvar är den ljusa löparen på c8 INTE blockerad — den kan fortfarande komma ut!"],
+        ideas: "The Caro-Kann is super solid. After ...d5, Black has a strong center AND the light bishop can develop freely (unlike in the French). Black's plan is to exchange center pawns, develop smoothly, and play for a safe, equal position.",
+        ideasSv: "Caro-Kann är supersolid. Efter ...d5 har svart ett starkt centrum OCH den ljusa löparen kan utvecklas fritt (till skillnad från Franskt). Svarts plan är att byta centerbönder, utveckla smidigt och spela för en säker, jämn ställning." },
+    { id: "scotch", icon: "⚔️", title: "Scotch Game", titleSv: "Skotska partiet",
+        desc: "White immediately opens up the center on move 3! Instead of slowly developing like the Italian, White plays d4 right away to blow the position open. This leads to active, aggressive chess from the very start.",
+        descSv: "Vit öppnar centrum direkt på drag 3! Istället för att sakta utveckla som i Italienska, spelar vit d4 direkt för att spränga ställningen. Detta leder till aktivt, aggressivt schack från allra första början.",
+        moves: ["e2e4","e7e5","g1f3","b8c6","d2d4"],
+        fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        stepDesc: ["White opens e4.","Black plays e5.","White develops the knight to f3, attacking e5.","Black defends with Nc6.","Instead of Bc4 (Italian) or Bb5 (Spanish), White plays d4! This immediately challenges the center. If exd4, White recaptures with the knight — the Scotch Game!"],
+        stepDescSv: ["Vit öppnar e4.","Svart spelar e5.","Vit utvecklar springaren till f3 och attackerar e5.","Svart försvarar med Sc6.","Istället för Lc4 (Italienska) eller Lb5 (Spanska), spelar vit d4! Detta utmanar centrum direkt. Om exd4 tar vit tillbaka med springaren — Skotska partiet!"],
+        ideas: "The Scotch Game is for players who like action! By playing d4 early, White opens lines for the bishops and creates immediate tension. The knight on d4 is powerful in the center. White gets fast development and attacking chances.",
+        ideasSv: "Skotska partiet är för spelare som gillar action! Genom att spela d4 tidigt öppnar vit linjer för löparna och skapar omedelbar spänning. Springaren på d4 är kraftfull i centrum. Vit får snabb utveckling och attackchanser." },
+    { id: "kingsgambit", icon: "🔥", title: "King's Gambit", titleSv: "Kungsgambit",
+        desc: "The most daring opening in chess! White SACRIFICES a pawn on move 2 to rip open the center and launch an immediate attack on the enemy king. It's risky but thrilling — perfect for brave players!",
+        descSv: "Den mest vågade öppningen i schack! Vit OFFRAR en bonde på drag 2 för att riva upp centrum och starta en omedelbar attack mot fiendens kung. Det är riskabelt men spännande — perfekt för modiga spelare!",
+        moves: ["e2e4","e7e5","f2f4"],
+        fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        stepDesc: ["White opens e4.","Black responds e5.","White plays f4 — the King's Gambit! White offers the f-pawn as a sacrifice. If Black takes (exf4), White gets a powerful center and open lines for attack. But White's king is a little less safe now... worth the risk?"],
+        stepDescSv: ["Vit öppnar e4.","Svart svarar e5.","Vit spelar f4 — Kungsgambit! Vit erbjuder f-bonden som offer. Om svart tar (exf4) får vit ett kraftfullt centrum och öppna linjer för attack. Men vits kung är lite mindre säker nu... värt risken?"],
+        ideas: "The King's Gambit is all about ATTACK. If Black takes the pawn, White plays d4 and Bc4 to build a huge center and aim at f7. White wants to castle queenside and launch a kingside storm. It's the chess equivalent of an all-in rush!",
+        ideasSv: "Kungsgambit handlar om ATTACK. Om svart tar bonden spelar vit d4 och Lc4 för att bygga ett enormt centrum och sikta på f7. Vit vill rockera damsidan och starta en kungssidestorm. Det är schackets motsvarighet till en all-in rush!" }
+];
+function LearnMode({ lang, theme }) {
+    const [section, setSection] = useState("tactics");
+    const [lessonIdx, setLessonIdx] = useState(0);
+    const [posIdx, setPosIdx] = useState(0);
+    const [board, setBoard] = useState(null);
+    const [pColor, setPColor] = useState("w");
+    const [sel, setSel] = useState(null);
+    const [status, setStatus] = useState("intro"); /* intro | learn | test | solved | congrats */
+    const [lastMv, setLastMv] = useState(null);
+    const [hintSq, setHintSq] = useState(null);
+    const [wrongSq, setWrongSq] = useState(null);
+    const [openingStep, setOpeningStep] = useState(0);
+    const [showHint, setShowHint] = useState(false);
+    const [testErrors, setTestErrors] = useState(0);
+    const [animating, setAnimating] = useState(false);
+    const timerRef = useRef(null);
+    const lessons = section === "tactics" ? TACTICAL_LESSONS : OPENING_LESSONS;
+    const lesson = lessons[lessonIdx];
+    const L = lang || "en";
+    const isSv = L === "sv";
+    const title = isSv && lesson.titleSv ? lesson.titleSv : lesson.title;
+    const desc = isSv && lesson.descSv ? lesson.descSv : lesson.desc;
+    const stepDescs = section === "openings" && lesson.stepDesc ? (isSv && lesson.stepDescSv ? lesson.stepDescSv : lesson.stepDesc) : null;
+    /* ── Apply a UCI move to the board ── */
+    const applyMove = (b, uci) => {
+        const m = parseUCI(uci);
+        const nb = b.map(r => [...r]);
+        const p = nb[m.fr][m.fc];
+        if (p && (p === "K" || p === "k") && Math.abs(m.tc - m.fc) === 2) {
+            if (m.tc > m.fc) { nb[m.fr][5] = nb[m.fr][7]; nb[m.fr][7] = null; }
+            else { nb[m.fr][3] = nb[m.fr][0]; nb[m.fr][0] = null; }
+        }
+        if (p && (p === "P" || p === "p") && m.fc !== m.tc && !nb[m.tr][m.tc]) nb[m.fr][m.tc] = null;
+        if (uci.length > 4) { const pp = uci[4]; nb[m.tr][m.tc] = isW(p) ? pp.toUpperCase() : pp.toLowerCase(); }
+        else nb[m.tr][m.tc] = p;
+        nb[m.fr][m.fc] = null;
+        return { nb, m };
+    };
+    const turnAtStep = (step) => step % 2 === 0 ? "w" : "b";
+    const playerSide = "w";
+    /* ── Start guided walkthrough ── */
+    const startLearn = () => {
+        const { board: b } = parseFEN(lesson.fen);
+        setBoard(b); setPColor("w"); setSel(null); setStatus("learn");
+        setLastMv(null); setHintSq(null); setWrongSq(null); setOpeningStep(0); setShowHint(false); setAnimating(false);
+        if (timerRef.current) clearTimeout(timerRef.current);
+    };
+    /* ── Start test mode ── */
+    const startTest = () => {
+        const { board: b } = parseFEN(lesson.fen);
+        setBoard(b); setPColor("w"); setSel(null); setStatus("test");
+        setLastMv(null); setHintSq(null); setWrongSq(null); setOpeningStep(0);
+        setShowHint(false); setTestErrors(0); setAnimating(false);
+        if (timerRef.current) clearTimeout(timerRef.current);
+    };
+    /* ── Start tactic practice ── */
+    const startTactic = (pIdx) => {
+        const pos = lesson.positions[pIdx || 0];
+        const { board: b, turn } = parseFEN(pos.fen);
+        setBoard(b); setPColor(turn); setSel(null); setStatus("learn");
+        setLastMv(null); setHintSq(null); setWrongSq(null); setPosIdx(pIdx || 0); setShowHint(false);
+    };
+    /* ── Auto-play opponent move ── */
+    const autoPlayOpponent = (currentBoard, nextStep, curStatus) => {
+        if (nextStep >= lesson.moves.length) {
+            setTimeout(() => setStatus(curStatus === "test" ? "congrats" : "solved"), 400);
+            return;
+        }
+        if (turnAtStep(nextStep) !== playerSide) {
+            setAnimating(true);
+            timerRef.current = setTimeout(() => {
+                const { nb, m } = applyMove(currentBoard, lesson.moves[nextStep]);
+                setBoard(nb); setLastMv(m);
+                const nn = nextStep + 1;
+                setOpeningStep(nn); setAnimating(false); playSound("move"); setShowHint(false);
+                if (nn >= lesson.moves.length) {
+                    setTimeout(() => setStatus(curStatus === "test" ? "congrats" : "solved"), 400);
+                }
+            }, 600);
+        }
+    };
+    /* ── Click handler for openings ── */
+    const clickOpening = (row, col) => {
+        if (animating || !board) return;
+        if (status !== "learn" && status !== "test") return;
+        if (openingStep >= lesson.moves.length) return;
+        if (turnAtStep(openingStep) !== playerSide) return;
+        const piece = board[row][col];
+        const isOwn = piece && isW(piece);
+        if (!sel) { if (isOwn) setSel({ row, col }); return; }
+        if (sel.row === row && sel.col === col) { setSel(null); return; }
+        if (isOwn) { setSel({ row, col }); return; }
+        const uci = toUCI(sel.row, sel.col, row, col);
+        const expected = lesson.moves[openingStep];
+        if (uci === expected || uci === expected.slice(0, 4)) {
+            const { nb, m } = applyMove(board, expected);
+            setBoard(nb); setLastMv(m); setSel(null); setHintSq(null); setWrongSq(null); setShowHint(false);
+            playSound("move");
+            const nn = openingStep + 1;
+            setOpeningStep(nn);
+            if (nn >= lesson.moves.length) {
+                setTimeout(() => setStatus(status === "test" ? "congrats" : "solved"), 400);
+            } else {
+                autoPlayOpponent(nb, nn, status);
+            }
+        } else {
+            setWrongSq({ row, col }); setSel(null); playSound("error");
+            if (status === "test") setTestErrors(e => e + 1);
+            setTimeout(() => setWrongSq(null), 800);
+        }
+    };
+    /* ── Click handler for tactics ── */
+    const clickTactic = (row, col) => {
+        if (status !== "learn" || !board || animating) return;
+        const piece = board[row][col];
+        const isOwn = piece && ((pColor === "w" && isW(piece)) || (pColor === "b" && !isW(piece)));
+        if (!sel) { if (isOwn) setSel({ row, col }); return; }
+        if (sel.row === row && sel.col === col) { setSel(null); return; }
+        if (isOwn) { setSel({ row, col }); return; }
+        const pos = lesson.positions[posIdx];
+        const uci = toUCI(sel.row, sel.col, row, col);
+        const expected = pos.moves[0];
+        if (uci === expected || uci === expected.slice(0, 4)) {
+            const { nb, m } = applyMove(board, expected);
+            setBoard(nb); setLastMv(m); setSel(null); setHintSq(null); setWrongSq(null);
+            setStatus("congrats"); playSound("gameover");
+        } else {
+            setWrongSq({ row, col }); setSel(null); playSound("error");
+            setTimeout(() => setWrongSq(null), 800);
+        }
+    };
+    const click = section === "openings" ? clickOpening : clickTactic;
+    const doHint = () => {
+        if (section === "openings" && openingStep < lesson.moves.length) {
+            const m = parseUCI(lesson.moves[openingStep]);
+            setHintSq({ row: m.fr, col: m.fc }); setShowHint(true);
+        } else if (section === "tactics" && lesson.positions) {
+            const m = parseUCI(lesson.positions[posIdx].moves[0]);
+            setHintSq({ row: m.fr, col: m.fc }); setShowHint(true);
+        }
+    };
+    const guidance = (() => {
+        if (section === "openings" && stepDescs) {
+            if (openingStep < stepDescs.length && turnAtStep(openingStep) === playerSide) return stepDescs[openingStep];
+            if (openingStep > 0 && openingStep <= stepDescs.length) return stepDescs[openingStep - 1];
+        }
+        return null;
+    })();
+    const pos = section === "tactics" && lesson.positions ? lesson.positions[posIdx] : null;
+    const posHint = pos ? (isSv && pos.hintSv ? pos.hintSv : pos.hint) : null;
+    const posExplain = pos ? (isSv && pos.explainSv ? pos.explainSv : pos.explain) : null;
+    const ideas = section === "openings" ? (isSv && lesson.ideasSv ? lesson.ideasSv : lesson.ideas) : null;
+    const congratsMessages = isSv
+        ? ["Fantastiskt jobbat! 🌟", "Du är en schackmästare! ♜", "Imponerande! Du lär dig snabbt! 🧠", "Perfekt utfört! 💪"]
+        : ["Amazing work! 🌟", "You're becoming a chess master! ♜", "Impressive! You learn fast! 🧠", "Perfectly done! Keep it up! 💪"];
+    const congratsMsg = congratsMessages[lessonIdx % congratsMessages.length];
+    const sectionBtns = [
+        { id: "tactics", label: isSv ? "🎯 Taktik" : "🎯 Tactics" },
+        { id: "openings", label: isSv ? "📖 Öppningar" : "📖 Openings" }
+    ];
+    return React.createElement("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", width: "100%" } },
+        /* ── CONGRATS OVERLAY ── */
+        status === "congrats" && React.createElement("div", { style: { position: "fixed", inset: 0, zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.75)", padding: 16 } },
+            React.createElement("div", { style: { maxWidth: 440, width: "100%", background: "linear-gradient(135deg, #0a1628, #121a30)", border: "2px solid rgba(212,175,55,0.4)", borderRadius: 16, padding: "32px 28px", textAlign: "center", boxShadow: "0 0 60px rgba(212,175,55,0.15)", animation: "fadeInUp 0.4s ease" } },
+                React.createElement("div", { style: { fontSize: 72, marginBottom: 12, animation: "crownFloat 2s ease-in-out infinite" } }, "🏆"),
+                React.createElement("h2", { style: { fontSize: 26, fontFamily: "'Cinzel',serif", color: "#d4af37", marginBottom: 8, fontWeight: 700 } },
+                    isSv ? "Gratulerar!" : "Congratulations!"),
+                React.createElement("p", { style: { fontSize: 18, color: "#e2e8f0", lineHeight: 1.7, marginBottom: 8 } }, congratsMsg),
+                React.createElement("p", { style: { fontSize: 15, color: "#94a3b8", marginBottom: 6 } },
+                    isSv ? "Du klarade: " : "You completed: ",
+                    React.createElement("strong", { style: { color: "#d4af37" } }, title)),
+                section === "openings" && testErrors > 0 && React.createElement("p", { style: { fontSize: 14, color: "#fbbf24", marginBottom: 6 } },
+                    testErrors === 1 ? (isSv ? "Bara 1 fel — nästan perfekt!" : "Just 1 mistake — almost perfect!") : (isSv ? testErrors + " fel — men du fixade det!" : testErrors + " mistakes — but you got there!")),
+                section === "openings" && testErrors === 0 && React.createElement("div", { style: { padding: "8px 16px", borderRadius: 8, background: "rgba(74,222,128,0.1)", border: "1px solid rgba(74,222,128,0.3)", marginBottom: 6, display: "inline-block" } },
+                    React.createElement("p", { style: { fontSize: 16, color: "#4ade80", fontWeight: 700, margin: 0 } },
+                        isSv ? "⭐ Inga fel — PERFEKT! ⭐" : "⭐ Zero mistakes — PERFECT! ⭐")),
+                section === "tactics" && React.createElement("p", { style: { fontSize: 14, color: "#4ade80", fontWeight: 600, marginBottom: 6 } },
+                    isSv ? "⭐ Du hittade rätt drag! ⭐" : "⭐ You found the right move! ⭐"),
+                React.createElement("div", { style: { display: "flex", gap: 8, justifyContent: "center", marginTop: 18, flexWrap: "wrap" } },
+                    section === "openings" && React.createElement(Btn, { onClick: startTest, l: isSv ? "↺ Testa igen" : "↺ Test Again" }),
+                    section === "tactics" && lesson.positions.length > 1 && React.createElement(Btn, { onClick: () => { const next = (posIdx + 1) % lesson.positions.length; setPosIdx(next); startTactic(next); }, l: isSv ? "Nästa position →" : "Next Position →" }),
+                    React.createElement(Btn, { onClick: () => { const next = (lessonIdx + 1) % lessons.length; setLessonIdx(next); setStatus("intro"); setBoard(null); if (timerRef.current) clearTimeout(timerRef.current); }, l: isSv ? "Nästa lektion →" : "Next Lesson →", accent: true })))),
+        /* ── SECTION TOGGLE ── */
+        React.createElement("div", { style: { display: "flex", gap: 4, marginBottom: 10 } },
+            sectionBtns.map(s => React.createElement("button", { key: s.id, onClick: () => { setSection(s.id); setLessonIdx(0); setStatus("intro"); setBoard(null); if (timerRef.current) clearTimeout(timerRef.current); },
+                style: { padding: "8px 20px", borderRadius: 6, border: section === s.id ? "1px solid rgba(212,175,55,0.5)" : "1px solid rgba(255,255,255,0.08)",
+                    background: section === s.id ? "rgba(212,175,55,0.12)" : "rgba(255,255,255,0.03)",
+                    color: section === s.id ? "#d4af37" : "#64748b", fontSize: 14, fontFamily: "'Cinzel',serif", fontWeight: 600, cursor: "pointer" } }, s.label))),
+        /* ── MAIN LAYOUT ── */
+        React.createElement("div", { style: { display: "flex", gap: 16, flexWrap: "wrap", justifyContent: "center", alignItems: "flex-start", maxWidth: 960, width: "100%" } },
+            /* LEFT: lesson list */
+            React.createElement("div", { style: { width: 220, minWidth: 180, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8, padding: 8, maxHeight: "70vh", overflowY: "auto" } },
+                lessons.map((l, idx) => React.createElement("button", { key: l.id, onClick: () => { setLessonIdx(idx); setStatus("intro"); setBoard(null); setPosIdx(0); if (timerRef.current) clearTimeout(timerRef.current); },
+                    style: { display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "10px 10px", borderRadius: 6, border: "none",
+                        background: idx === lessonIdx ? "rgba(212,175,55,0.1)" : "transparent",
+                        color: idx === lessonIdx ? "#e2e8f0" : "#64748b", cursor: "pointer", fontSize: 13, textAlign: "left" } },
+                    React.createElement("span", { style: { fontSize: 20 } }, l.icon),
+                    React.createElement("span", { style: { fontFamily: "'Cinzel',serif", fontWeight: idx === lessonIdx ? 600 : 400 } }, isSv && l.titleSv ? l.titleSv : l.title)))),
+            /* CENTER: board or intro card */
+            React.createElement("div", { style: { display: "flex", flexDirection: "column", alignItems: "center" } },
+                board && status !== "intro" ? React.createElement(React.Fragment, null,
+                    /* Instruction banner ABOVE board */
+                    React.createElement("div", { style: { width: "min(400px,86vw)", padding: "10px 14px", marginBottom: 8, borderRadius: 8, background: status === "test" ? "rgba(129,140,248,0.08)" : "rgba(212,175,55,0.06)", border: "1px solid " + (status === "test" ? "rgba(129,140,248,0.2)" : "rgba(212,175,55,0.15)"), textAlign: "center" } },
+                        status === "test" && React.createElement("p", { style: { fontSize: 15, color: "#a5b4fc", lineHeight: 1.6, margin: 0, fontWeight: 600 } },
+                            isSv ? "🧠 Test! Spela öppningen från minnet!" : "🧠 Test time! Play the opening from memory!"),
+                        status === "learn" && section === "openings" && guidance && React.createElement("p", { style: { fontSize: 15, color: "#e2e8f0", lineHeight: 1.6, margin: 0, fontWeight: 500 } },
+                            turnAtStep(openingStep) === playerSide ? (isSv ? "👆 Din tur: " : "👆 Your turn: ") : "✓ ", guidance),
+                        status === "learn" && section === "openings" && !guidance && openingStep === 0 && React.createElement("p", { style: { fontSize: 15, color: "#d4af37", lineHeight: 1.6, margin: 0 } },
+                            isSv ? "👆 Gör det första draget!" : "👆 Make the first move!"),
+                        status === "learn" && section === "tactics" && posHint && React.createElement("p", { style: { fontSize: 15, color: "#fbbf24", lineHeight: 1.6, margin: 0, fontWeight: 500 } },
+                            "💡 ", posHint),
+                        status === "solved" && React.createElement("p", { style: { fontSize: 15, color: "#4ade80", lineHeight: 1.6, margin: 0, fontWeight: 600 } },
+                            isSv ? "✓ Bra gjort! Redo för testet?" : "✓ Well done! Ready for the test?")),
+                    React.createElement(Board, { board: board, flip: pColor === "b", sel: sel, dests: [], lastMv: lastMv, onClick: click, hintSq: hintSq, wrongSq: wrongSq, disabled: status === "solved" || status === "congrats" || animating, theme: theme }),
+                    /* Buttons BELOW board */
+                    React.createElement("div", { style: { display: "flex", gap: 5, marginTop: 8, flexWrap: "wrap", justifyContent: "center" } },
+                        (status === "learn" || status === "test") && React.createElement(React.Fragment, null,
+                            React.createElement(Btn, { onClick: doHint, l: isSv ? "💡 Ledtråd" : "💡 Hint" }),
+                            React.createElement(Btn, { onClick: () => { setStatus("intro"); setBoard(null); if (timerRef.current) clearTimeout(timerRef.current); }, l: isSv ? "↩ Tillbaka" : "↩ Back" })),
+                        status === "solved" && section === "openings" && React.createElement(React.Fragment, null,
+                            React.createElement(Btn, { onClick: startTest, l: isSv ? "🧠 Testa mig!" : "🧠 Test Me!", accent: true }),
+                            React.createElement(Btn, { onClick: () => { setStatus("intro"); setBoard(null); }, l: isSv ? "↩ Tillbaka" : "↩ Back" })),
+                        status === "solved" && section === "tactics" && React.createElement(React.Fragment, null,
+                            lesson.positions.length > 1 && React.createElement(Btn, { onClick: () => { const next = (posIdx + 1) % lesson.positions.length; setPosIdx(next); startTactic(next); }, l: isSv ? "Nästa →" : "Next →", accent: true }),
+                            React.createElement(Btn, { onClick: () => startTactic(posIdx), l: isSv ? "↺ Igen" : "↺ Again" })))
+                ) : /* INTRO CARD */
+                React.createElement("div", { style: { width: "min(420px,88vw)", background: "rgba(212,175,55,0.04)", border: "1px solid rgba(212,175,55,0.15)", borderRadius: 12, padding: "28px 24px", textAlign: "center" } },
+                    React.createElement("div", { style: { fontSize: 56, marginBottom: 10 } }, lesson.icon),
+                    React.createElement("h2", { style: { fontSize: 22, fontFamily: "'Cinzel',serif", color: "#d4af37", marginBottom: 14, fontWeight: 700 } }, title),
+                    React.createElement("p", { style: { fontSize: 15, lineHeight: 1.8, color: "#cbd5e1", marginBottom: 18, textAlign: "left" } }, desc),
+                    section === "tactics" && React.createElement(React.Fragment, null,
+                        React.createElement("div", { style: { fontSize: 13, color: "#8888a0", marginBottom: 10 } }, lesson.positions.length + " " + (isSv ? "övningspositioner" : "practice positions")),
+                        React.createElement(Btn, { onClick: () => startTactic(0), l: isSv ? "▶ Öva nu" : "▶ Practice Now", accent: true })),
+                    section === "openings" && React.createElement(React.Fragment, null,
+                        React.createElement("div", { style: { fontSize: 14, color: "#94a3b8", marginBottom: 12, lineHeight: 1.6 } },
+                            isSv ? "🎮 Du gör dragen själv — sedan testar vi om du kommer ihåg dem!" : "🎮 You'll make the moves yourself — then we'll quiz you to see if you remember!"),
+                        React.createElement(Btn, { onClick: startLearn, l: isSv ? "▶ Börja lära" : "▶ Start Learning", accent: true })))),
+            /* RIGHT: guide panel */
+            React.createElement("div", { style: { width: 280, minWidth: 220, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8, padding: 16 } },
+                React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: "#d4af37", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10, fontFamily: "'Cinzel',serif" } },
+                    section === "tactics" ? (isSv ? "Taktiskt mönster" : "Tactical Pattern") : (isSv ? "Öppningsguide" : "Opening Guide")),
+                board && section === "openings" && React.createElement("div", { style: { marginBottom: 12 } },
+                    React.createElement("div", { style: { display: "flex", justifyContent: "space-between", marginBottom: 4 } },
+                        React.createElement("span", { style: { fontSize: 12, color: "#8888a0" } }, status === "test" ? (isSv ? "🧠 Test" : "🧠 Test") : (isSv ? "Framsteg" : "Progress")),
+                        React.createElement("span", { style: { fontSize: 12, color: "#d4af37", fontWeight: 600 } }, Math.min(openingStep, lesson.moves.length) + " / " + lesson.moves.length)),
+                    React.createElement("div", { style: { height: 6, borderRadius: 3, background: "rgba(255,255,255,0.06)" } },
+                        React.createElement("div", { style: { height: "100%", borderRadius: 3, background: status === "test" ? "linear-gradient(90deg, #818cf8, #a78bfa)" : "linear-gradient(90deg, #d4af37, #f59e0b)", width: (Math.min(openingStep, lesson.moves.length) / lesson.moves.length * 100) + "%", transition: "width 0.3s" } }))),
+                section === "openings" && ideas && React.createElement("div", { style: { padding: "12px 14px", borderRadius: 8, background: "rgba(212,175,55,0.04)", border: "1px solid rgba(212,175,55,0.1)", marginBottom: 12 } },
+                    React.createElement("div", { style: { fontSize: 11, fontWeight: 600, color: "#d4af37", marginBottom: 6, textTransform: "uppercase" } }, isSv ? "💡 Nyckelidéer" : "💡 Key Ideas"),
+                    React.createElement("p", { style: { fontSize: 14, color: "#cbd5e1", lineHeight: 1.7, margin: 0 } }, ideas)),
+                board && section === "tactics" && status === "learn" && posHint && React.createElement("div", { style: { padding: "12px 14px", borderRadius: 8, background: "rgba(251,191,36,0.06)", border: "1px solid rgba(251,191,36,0.15)", marginBottom: 12 } },
+                    React.createElement("div", { style: { fontSize: 11, fontWeight: 600, color: "#fbbf24", marginBottom: 6 } }, isSv ? "💡 Ditt mål" : "💡 Your Goal"),
+                    React.createElement("p", { style: { fontSize: 14, color: "#e2e8f0", lineHeight: 1.7, margin: 0 } }, posHint)),
+                !board && React.createElement("div", { style: { padding: "14px", borderRadius: 8, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.04)" } },
+                    React.createElement("p", { style: { fontSize: 14, color: "#94a3b8", lineHeight: 1.7, margin: 0 } },
+                        isSv ? "👈 Välj en lektion och börja! Du gör dragen själv och får feedback direkt."
+                        : "👈 Pick a lesson and start! You make the moves yourself and get instant feedback.")),
+                React.createElement("div", { style: { borderTop: "1px solid rgba(255,255,255,0.06)", marginTop: 12, paddingTop: 10 } },
+                    React.createElement("div", { style: { fontSize: 13, color: "#64748b" } },
+                        section === "tactics" ? TACTICAL_LESSONS.length + " " + (isSv ? "taktiska mönster" : "tactical patterns") : "",
+                        section === "openings" ? OPENING_LESSONS.length + " " + (isSv ? "öppningar" : "openings") : "")))));
+}
+/* ═══════════════════════════════════════════════════════════════════════════════
    PUZZLE MODE
    ═══════════════════════════════════════════════════════════════════════════════ */
 function PuzzleMode({ lang, theme }) {
@@ -21236,9 +21556,10 @@ function ChessPlatform() {
                 tr("title", lang)),
             React.createElement("div", { style: { width: 80, height: 1, background: "linear-gradient(90deg,transparent,rgba(212,175,55,0.5),transparent)", margin: "6px auto 0" } })),
         React.createElement("p", { style: { position: "relative", zIndex: 1, fontSize: 10, fontFamily: "'Cinzel',serif", color: "rgba(212,175,55,0.35)", letterSpacing: "0.25em", margin: "0 0 14px", textTransform: "uppercase", animation: "fadeInUp 0.6s ease 0.15s both" } }, tr("sub", lang)),
-        React.createElement("div", { style: { position: "relative", zIndex: 1, display: "flex", gap: 3, marginBottom: 14, background: "rgba(212,175,55,0.04)", borderRadius: 10, padding: 4, border: "1px solid rgba(212,175,55,0.1)", backdropFilter: "blur(8px)", animation: "fadeInUp 0.6s ease 0.3s both" } }, [{ id: "play", label: tr("playTab", lang) }, { id: "puzzles", label: tr("puzzTab", lang) }].map(t => React.createElement("button", { key: t.id, onClick: () => setTab(t.id), style: { padding: "8px 24px", borderRadius: 7, border: "none", background: tab === t.id ? "linear-gradient(135deg,rgba(212,175,55,0.15),rgba(212,175,55,0.08))" : "transparent", color: tab === t.id ? "#d4af37" : "#64748b", fontSize: 12, fontFamily: "'Cinzel',serif", fontWeight: tab === t.id ? 700 : 400, cursor: "pointer", transition: "all 0.25s", letterSpacing: "0.05em", boxShadow: tab === t.id ? "0 2px 12px rgba(212,175,55,0.1)" : "none" } }, t.label))),
+        React.createElement("div", { style: { position: "relative", zIndex: 1, display: "flex", gap: 3, marginBottom: 14, background: "rgba(212,175,55,0.04)", borderRadius: 10, padding: 4, border: "1px solid rgba(212,175,55,0.1)", backdropFilter: "blur(8px)", animation: "fadeInUp 0.6s ease 0.3s both" } }, [{ id: "play", label: tr("playTab", lang) }, { id: "learn", label: tr("learnTab", lang) }, { id: "puzzles", label: tr("puzzTab", lang) }].map(t => React.createElement("button", { key: t.id, onClick: () => setTab(t.id), style: { padding: "8px 24px", borderRadius: 7, border: "none", background: tab === t.id ? "linear-gradient(135deg,rgba(212,175,55,0.15),rgba(212,175,55,0.08))" : "transparent", color: tab === t.id ? "#d4af37" : "#64748b", fontSize: 12, fontFamily: "'Cinzel',serif", fontWeight: tab === t.id ? 700 : 400, cursor: "pointer", transition: "all 0.25s", letterSpacing: "0.05em", boxShadow: tab === t.id ? "0 2px 12px rgba(212,175,55,0.1)" : "none" } }, t.label))),
         React.createElement("div", { style: { position: "relative", zIndex: 1, width: "100%", display: "flex", flexDirection: "column", alignItems: "center", animation: "fadeInUp 0.6s ease 0.4s both" } },
             tab === "play" && React.createElement(PlayMode, { lang: lang, theme: theme }),
+            tab === "learn" && React.createElement(LearnMode, { lang: lang, theme: theme }),
             tab === "puzzles" && React.createElement(PuzzleMode, { lang: lang, theme: theme })));
 }
 ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(ChessPlatform, null));
