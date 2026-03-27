@@ -17831,7 +17831,10 @@ function isInsufficient(board) {
    SOUND ENGINE — Tone.js
    ═══════════════════════════════════════════════════════════════════════════════ */
 let synthReady = false;
+let _soundEnabled = false; /* OFF by default — students play in the library! */
 const synths = {};
+function setSoundEnabled(v) { _soundEnabled = v; }
+function getSoundEnabled() { return _soundEnabled; }
 function initSound() {
     if (synthReady)
         return;
@@ -17846,6 +17849,7 @@ function initSound() {
     catch (e) { }
 }
 function playSound(type) {
+    if (!_soundEnabled) return;
     try {
         if (!synthReady)
             initSound();
@@ -21090,7 +21094,7 @@ function LearnMode({ lang, theme }) {
     /* ── Auto-play opponent move ── */
     const autoPlayOpponent = (currentBoard, nextStep, curStatus) => {
         if (nextStep >= lesson.moves.length) {
-            setTimeout(() => setStatus(curStatus === "test" ? "congrats" : "solved"), 400);
+            setStatus(curStatus === "test" ? "congrats" : "solved");
             return;
         }
         if (turnAtStep(nextStep) !== playerSide) {
@@ -21101,7 +21105,7 @@ function LearnMode({ lang, theme }) {
                 const nn = nextStep + 1;
                 setOpeningStep(nn); setAnimating(false); playSound("move"); setShowHint(false);
                 if (nn >= lesson.moves.length) {
-                    setTimeout(() => setStatus(curStatus === "test" ? "congrats" : "solved"), 400);
+                    setStatus(curStatus === "test" ? "congrats" : "solved");
                 }
             }, 600);
         }
@@ -21121,14 +21125,15 @@ function LearnMode({ lang, theme }) {
         const expected = lesson.moves[openingStep];
         if (uci === expected || uci === expected.slice(0, 4)) {
             const { nb, m } = applyMove(board, expected);
+            const curStatus = status; /* capture before any state updates */
             setBoard(nb); setLastMv(m); setSel(null); setHintSq(null); setWrongSq(null); setShowHint(false);
             playSound("move");
             const nn = openingStep + 1;
             setOpeningStep(nn);
             if (nn >= lesson.moves.length) {
-                setTimeout(() => setStatus(status === "test" ? "congrats" : "solved"), 400);
+                setStatus(curStatus === "test" ? "congrats" : "solved");
             } else {
-                autoPlayOpponent(nb, nn, status);
+                autoPlayOpponent(nb, nn, curStatus);
             }
         } else {
             setWrongSq({ row, col }); setSel(null); playSound("error");
@@ -21540,11 +21545,15 @@ function ChessPlatform() {
     const [tab, setTab] = useState("play");
     const [lang, setLang] = useState("en");
     const [themeIdx, setThemeIdx] = useState(0);
+    const [soundOn, setSoundOn] = useState(false);
     const theme = BOARD_THEMES[themeIdx];
+    const toggleSound = () => { const next = !soundOn; setSoundOn(next); setSoundEnabled(next); if (next) playSound("move"); };
     return React.createElement("div", { style: { minHeight: "100vh", background: "radial-gradient(ellipse at 20% 50%,#0f1a2e 0%,#060d1a 50%,#030810 100%)", color: "#c8d6e5", fontFamily: "'Crimson Pro',Georgia,serif", padding: "16px 8px", display: "flex", flexDirection: "column", alignItems: "center", position: "relative", overflow: "hidden" } },
         React.createElement(StarfieldBg, null),
         React.createElement("div", { style: { position: "absolute", top: 0, left: "50%", transform: "translateX(-50%)", width: "60%", height: 1, background: "linear-gradient(90deg,transparent,rgba(212,175,55,0.4),rgba(212,175,55,0.6),rgba(212,175,55,0.4),transparent)" } }),
         React.createElement("div", { style: { position: "absolute", top: 8, right: 12, zIndex: 10, display: "flex", gap: 6, alignItems: "center" } },
+            React.createElement("button", { onClick: toggleSound, style: { padding: "4px 10px", borderRadius: 5, border: soundOn ? "1px solid rgba(74,222,128,0.3)" : "1px solid rgba(255,255,255,0.1)", background: soundOn ? "rgba(74,222,128,0.1)" : "rgba(255,255,255,0.03)", color: soundOn ? "#4ade80" : "#64748b", fontSize: 10, cursor: "pointer", fontFamily: "'Cinzel',serif" } },
+                soundOn ? "🔊 On" : "🔇 Off"),
             React.createElement("button", { onClick: () => setThemeIdx(i => (i + 1) % BOARD_THEMES.length), style: { padding: "4px 10px", borderRadius: 5, border: "1px solid rgba(212,175,55,0.2)", background: "rgba(212,175,55,0.06)", color: "#d4af37", fontSize: 10, cursor: "pointer", fontFamily: "'Cinzel',serif" } },
                 "\uD83C\uDFA8 ",
                 lang === "sv" ? theme.sv : theme.name),
