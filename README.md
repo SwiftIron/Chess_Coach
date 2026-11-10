@@ -23,7 +23,7 @@ A chess coaching platform designed for Swedish school students. Play against AI 
 
 ## How hard are the bots?
 
-Measured with the app's own engine (400 games per pairing; Mr Sweidan vs Blademaster 17 games):
+Measured with the app's own engine (400 games per pairing; Teacher BOT vs Blademaster 17 games):
 
 | Bot | Plays like | Beats the bot below it |
 |---|---|---|
@@ -31,9 +31,9 @@ Measured with the app's own engine (400 games per pairing; Mr Sweidan vs Bladema
 | ⚔️ Grunt (~600) | Grabs material without checking recaptures | 98% vs Peon |
 | 🐺 Raider (~1000) | Avoids obvious hanging pieces; gives material away every ~27 moves | 76% vs Grunt |
 | 🗡️ Blademaster (~1400) | Never leaves a piece hanging, but only looks one move ahead — forks and two-move tactics beat it | 87% vs Raider |
-| 💀 Mr Sweidan (~2200) | Searches 5+ moves ahead, thinks ~3–4 s per move (in the background) | 17 of 17 vs Blademaster |
+| 💀 Teacher BOT (~2200) | Searches 5+ moves ahead, thinks ~3–4 s per move (in the background) | 17 of 17 vs Blademaster |
 
-There is a deliberate jump before Mr Sweidan, the "boss". A good path for students: beat Raider, then Blademaster (look for forks), then try Mr Sweidan.
+There is a deliberate jump before Teacher BOT, the "boss". A good path for students: beat Raider, then Blademaster (look for forks), then try Teacher BOT.
 
 ## Chess Clock
 
