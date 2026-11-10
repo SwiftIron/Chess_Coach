@@ -1,4 +1,4 @@
-# ♜ Hässelby Chess Coach
+# ♜ School Chess Coach
 
 A chess coaching platform designed for Swedish school students. Play against AI opponents of varying difficulty, solve tactical puzzles, and receive real-time coaching feedback on every move - all running completely offline on school Chromebooks.
 
@@ -128,4 +128,4 @@ The Lichess puzzle data is licensed under [CC0 1.0](https://creativecommons.org/
 
 - [Lichess](https://lichess.org) - open puzzle database (CC0)
 - [React](https://react.dev) - UI framework
-- Built for the students of Hässelby, Stockholm
+- Built for the students of School, Stockholm
